@@ -13,11 +13,14 @@ existing `GOPRIVATE` entries when adding this module:
 
 ```sh
 go env -w GOPRIVATE=github.com/getrepro/go-sdk
-go get github.com/getrepro/go-sdk@v0.1.0
-go install github.com/getrepro/go-sdk/cmd/repro-go@v0.1.0
+go get github.com/getrepro/go-sdk@v0.1.1
+go install github.com/getrepro/go-sdk/cmd/repro-go@v0.1.1
 ```
 
 Add `$(go env GOPATH)/bin` to `PATH`. No local module replacement is needed.
+
+Hosted Repro endpoints are configured automatically. Approved policies are
+still fetched and applied unless an inline policy or explicit raw capture is used.
 
 Add initialization before starting servers or consumers:
 
@@ -40,10 +43,8 @@ func main() {
         AppSecret:   os.Getenv("REPRO_APP_SECRET"),
         AppName:     "orders-api",
         ServiceName: "Orders API",
-        IngestBase:  "https://YOUR-COLLECTOR",
         Mode:        "staging",
         Privacy: repro.PrivacyConfig{
-            APIBase:     "https://YOUR-API/api",
             Environment: "dev",
         },
     })
@@ -91,7 +92,6 @@ rate := 0.1
 config.Mode = "live"
 config.ActorLabels = map[string]string{"team": "operations", "region": "eu"}
 config.Live = repro.LiveConfig{
-    APIBase: "https://YOUR-API/api",
     Policy: repro.LivePolicy{SampleRate: &rate},
     DefineActorID: func(r *http.Request) string {
         // Use a trusted identity available before the application handler runs.
@@ -195,14 +195,12 @@ explicit value representations; float precision is retained for round-tripping.
 | --- | --- |
 | `TenantID`, `AppID`, `AppSecret` | Required Repro app identity; keep the secret on the backend |
 | `AppName`, `ServiceName` | Service attribution; `ServiceName` defaults to `AppName` |
-| `IngestBase` | Required collector origin; SDK appends `/v1/ingest/events` |
 | `Mode` | `staging` or `live`; default `staging` |
 | `ActorID`, `ActorLabels` | Service identity and labels; default actor is `AppID` |
 | `CaptureRaw` | Default false; explicit privacy bypass |
-| `Privacy.APIBase`, `.Environment` | API prefix and policy environment; environment defaults to `dev` |
+| `Privacy.Environment` | Policy environment; defaults to `dev` |
 | `Privacy.Policy` | Optional policy JSON supplied locally instead of fetching |
 | `Privacy.FetchTimeout` | 5 seconds |
-| `Live.APIBase` | Defaults to `Privacy.APIBase`; required in live mode |
 | `Live.Policy.SampleRate` | Pointer to 0..1; nil delegates the default to the API |
 | `Live.Policy.Targets` | Expiring actor-ID or label matches |
 | `Live.DefineActorID` | Optional HTTP identity callback |

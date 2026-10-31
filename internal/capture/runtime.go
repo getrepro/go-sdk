@@ -133,6 +133,12 @@ func Init(c Config) (*Runtime, error) {
 	if c.Mode != "staging" && c.Mode != "live" {
 		return nil, errors.New("repro: Mode must be staging or live")
 	}
+	if c.IngestBase == "" {
+		c.IngestBase = "https://log-collector-5rj86.ondigitalocean.app"
+	}
+	if c.Privacy.APIBase == "" {
+		c.Privacy.APIBase = "https://repro-api-d7288.ondigitalocean.app/api"
+	}
 	u, err := url.Parse(c.IngestBase)
 	if err != nil || u.Host == "" || (u.Scheme != "http" && u.Scheme != "https") || u.User != nil {
 		return nil, errors.New("repro: IngestBase must be an HTTP(S) URL without credentials")
