@@ -1,0 +1,8 @@
+{
+  "tools/privacy-crypto.ts": "f1ebced94638ff06c5ffa65ab6c2e888f9734c70e082082035ff265a42e65b7c",
+  "tools/privacy-entry.ts": "202719658eaca0d919be8864b1efbb3793ed8a744fcb4315ee579c425a9b974e",
+  "../node-sdk/src/capture-work-budget.ts": "967ea5eea37e402fdc0eaad486a2459917a1b7d1c5e0abc846ab94d5472f22a1",
+  "../node-sdk/src/privacy-fallback.ts": "0d3c4c7d23b344d30a91e3b2bed598747fe26be7d96e67281d19634f8afc1619",
+  "../node-sdk/src/privacy-redaction.ts": "2dc1f3d45dac725a1a467b8d92ebf0011d94ade76c956a9d5cd299da9a2c1d58",
+  "../node-sdk/src/privacy.ts": "66db7d9ffca4482a1796556370e141c7a688abc06824c0664c598d37dd626654"
+}
