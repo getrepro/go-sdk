@@ -5,6 +5,9 @@ functions and supported library calls. Do not replace your HTTP handlers,
 database clients, transactions, or Kafka processing code with Repro wrappers.
 The SDK uses the existing Repro collector and API contracts.
 
+**Only APIs, no frontend?** Follow the [API-only quickstart](#api-only-quickstart)
+below. You do not need the JavaScript SDK.
+
 ## Install from the private repository
 
 Requires Go 1.26 or newer and read access to `getrepro/go-sdk`. Authenticate Git
@@ -21,6 +24,129 @@ Add `$(go env GOPATH)/bin` to `PATH`. No local module replacement is needed.
 
 Hosted Repro endpoints are configured automatically. Approved policies are
 still fetched and applied unless an inline policy or explicit raw capture is used.
+
+## API-only quickstart
+
+### 1. Initialize once before starting your existing server
+
+Use your Repro app credentials. Keep your existing routes, handlers and database
+code unchanged. `Mode: "live"` starts capture automatically for eligible incoming
+requests, without browser recordings or caller-supplied session headers.
+
+```go
+rate := 1.0 // Start with 100% sampling for verification; quotas still apply.
+
+sdk, err := repro.Init(repro.Config{
+    TenantID:    os.Getenv("REPRO_TENANT_ID"),
+    AppID:       os.Getenv("REPRO_APP_ID"),
+    AppSecret:   os.Getenv("REPRO_APP_SECRET"),
+    AppName:     "orders-api",
+    ServiceName: "Orders API",
+    Mode:        "live",
+    ActorID:     "orders-api",
+    Live: repro.LiveConfig{
+        Policy: repro.LivePolicy{SampleRate: &rate},
+    },
+    Privacy: repro.PrivacyConfig{Environment: "dev"},
+})
+if err != nil {
+    log.Printf("Repro unavailable: %v", err)
+}
+```
+
+Use the policy environment configured for your service. `live` is the capture
+mode, not the environment: it also works with a `dev` policy. When initialization
+succeeds, call `sdk.Shutdown(ctx)` from your existing graceful-shutdown handler,
+after stopping incoming work. See the [initialization/shutdown example below](#browser-correlated-setup)
+for error handling and bounded shutdown; keep the live configuration above.
+
+### 2. Build and run
+
+```sh
+repro-go build -o orders-api .
+./orders-api
+```
+
+Use your application's package path instead of `.` if its entry point lives in
+another directory. Use `repro-go build`, not ordinary `go build`.
+
+### 3. Call your API normally, then inspect the session in Repro
+
+```sh
+curl http://localhost:8080/orders
+```
+
+Use an existing endpoint and port from your application. No special request
+headers or recording button are required.
+
+```mermaid
+flowchart LR
+    Caller[API caller or another service] --> API[Your Go API]
+    API --> Handler[Existing handler and business functions]
+    Handler --> DB[Database or cache]
+    Handler --> Other[Another instrumented API or supported message consumer]
+    API -. Automatic capture .-> Repro[Repro session]
+    Handler -. Arguments and return values .-> Repro
+    DB -. Queries and results .-> Repro
+    Other -. Correlated integration evidence .-> Repro
+    Repro --> View[Inspect requests, flows and traces]
+```
+
+Repro records supported operations that actually run inside the captured work,
+subject to privacy rules and capture limits. There is no screen replay or browser
+action timeline because there is no frontend. Initialize and build each service
+you want to inspect with its own service name.
+
+### When does a session start and end?
+
+For this example, `ActorID: "orders-api"` groups traffic at the service level.
+It does not identify individual customers. Requests for the same app and actor
+share the active window, including concurrent requests.
+The API assigns windows of up to three minutes; this is not a sliding timer
+that resets after every request.
+
+| Event | What Repro does |
+| --- | --- |
+| Your API process starts | Initializes the SDK. No session starts just because the process is running. |
+| First eligible incoming request | Checks sampling and quotas. If admitted, starts a backend session. |
+| More requests in the same three-minute window | Adds them to that session for the same app and actor. Each request remains separately inspectable. |
+| The three-minute window ends | Stops admitting new independent requests into that session. This does not cancel application requests. |
+| Another request arrives after the boundary | If admitted, records it in the next linked session segment. No traffic means no empty continuation is created. |
+| Work from the earlier window finishes | Uploads its evidence to the original session, even if it finishes after the three-minute boundary. |
+| Expected evidence has arrived and been processed | The session can become complete. This can be later than the end of the capture window. |
+
+For example, with continuous traffic and the same app/actor:
+
+```text
+10:00:00  GET /orders          -> Session A starts
+10:01:00  POST /orders         -> Session A
+10:02:50  POST /export starts  -> Session A
+10:03:00                       -> A closes to new independent requests
+10:03:05  GET /orders          -> Session B starts (continuation)
+10:03:20  /export finishes     -> Its response and traces still belong to A
+                               A completes after its expected evidence is processed
+```
+
+You do not manually start, stop or promote these live sessions. A request ending
+does not immediately end its three-minute session window. For example, one
+one-second request can still leave its session processing until the window closes
+and ingestion finishes. There is no fixed promise that completion occurs at
+exactly three minutes.
+
+The three-minute limit applies to admitting new work, not to forcibly stopping a
+long-running handler. Detached correlated work after a handler returns is bounded
+separately by `DrainTimeout` (30 seconds by default). Shutdown, delivery failures
+or capture limits can leave evidence incomplete; the SDK reports these rather
+than promising unlimited capture.
+
+For per-customer identity, lower sampling rates, message consumers or workers,
+see [Backend-only applications](docs/backend-only.md).
+
+## Browser-correlated setup
+
+Use this staging configuration when an upstream recording already supplies
+session correlation, for example through the browser SDK. For APIs with no
+frontend, use the live configuration above instead.
 
 Add initialization before starting servers or consumers:
 
